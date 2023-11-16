@@ -80,8 +80,6 @@ class Ball:
         self.pos = pygame.Vector2(x, y)
 
         self.r = 10
-        self.vx = 0
-        self.vy = 0
         self.vel = pygame.Vector2(self.vx, self.vy)
 
         self.ax = 0
