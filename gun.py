@@ -3,7 +3,7 @@ import random as rn
 
 import pygame
 
-FPS = 30
+FPS = 60
 G = 9.8 * 10 ** 2
 
 RED = 0xFF0000
@@ -34,6 +34,14 @@ def keyPressed(inputKey):
         return True
     else:
         return False
+
+def clamp(color):
+    new_col = color
+    for i in color:
+        if i > 255:
+            i = 255
+        if i < 0:
+            i = 0
 
 
 class Vec2:
@@ -76,16 +84,15 @@ class Ball:
         """
         self.screen = screen
         self.pos = pygame.Vector2(x, y)
+        self.vel = pygame.Vector2(0, 0)
+        self.a = pygame.Vector2(0, G)
+        self.type = 0
 
         self.r = 10
-        self.vel = pygame.Vector2(0, 0)
-
-        self.ax = 0
-        self.ay = -G
-        self.a = pygame.Vector2(0, G)
         self.color = rn.choice(GAME_COLORS)
         self.live = 30
         self.friction = 0.25
+
 
     def move(self):
         """Переместить мяч по прошествии единицы времени.
@@ -102,10 +109,10 @@ class Ball:
 
         if self.pos.x > WIDTH:
             self.pos.x -= 2 * (self.pos.x - WIDTH)
-            self.vel.x *= -1
+            self.vel.x *= -(1 - self.friction)
         if self.pos.x < 0:
             self.pos.x *= -1
-            self.vel.x *= -1
+            self.vel.x *= -(1 - self.friction)
 
         if self.pos.y > HEIGHT:
             dy = self.pos.y - HEIGHT
@@ -118,12 +125,15 @@ class Ball:
 
     def draw(self):
         #self.pos = pygame.Vector2(self.x, self.y)
-        pygame.draw.circle(
+        if self.type == 0:
+            pygame.draw.circle(
             self.screen,
             self.color,
             self.pos,
             self.r
-        )
+            )
+        elif self.type == 1:
+            pygame.draw.line(screen, self.color, self.pos, self.pos + self.vel * 1.5/30)
 
     def hittest(self, obj):
         """Функция проверяет сталкивалкивается ли данный обьект с целью, описываемой в обьекте obj.
@@ -133,10 +143,10 @@ class Ball:
         Returns:
             Возвращает True в случае столкновения мяча и цели. В противном случае возвращает False.
         """
-        # print((self.x - obj.x)**2 + (self.y - obj.y)**2 - (self.r + obj.r)**2)
-
-        #return ((self.x - obj.x) ** 2 + (self.y - obj.y) ** 2) < (self.r + obj.r) ** 2
-        return (self.pos - pygame.Vector2(obj.x, obj.y)).magnitude_squared() < (self.r + obj.r)**2
+        if self.type >= 0:
+            return (self.pos - pygame.Vector2(obj.x, obj.y)).magnitude_squared() < (self.r + obj.r)**2
+        else:
+            return False
 
 
 class Gun:
@@ -150,7 +160,7 @@ class Gun:
         self.x = Ball(self.screen).pos.x
         self.y = Ball(self.screen).pos.y
 
-        self.ammo = [10, 0, 0]
+        self.ammo = [10, 10, 10]
         self.ammotype = 0
 
         self.pos = pygame.Vector2(self.x, self.y)
@@ -188,19 +198,28 @@ class Gun:
         """
         global balls, bullet
         if self.f2_on == 1:
+            self.an = math.atan2((mouse_pos.y - self.y), (mouse_pos.x - self.x))
             bullet += 1
             new_ball = Ball(self.screen, self.x, self.y)
-            new_ball.r += 5
-            self.an = math.atan2((mouse_pos.y - self.y), (mouse_pos.x - self.x))
+            new_ball.type = self.ammotype
 
-            new_ball.vx = self.f2_power * math.cos(self.an)
-            new_ball.vy = - self.f2_power * math.sin(self.an)
+            if self.ammotype == 0:
+                new_ball.r = 15
+                new_ball.vel = pygame.Vector2(self.f2_power, 0).rotate(self.an * 180/3.1416)
+                new_ball.color = RED
 
-            new_ball.vel = pygame.Vector2(self.f2_power, 0).rotate(self.an * 180/3.1416)
+                balls.append(new_ball)
+                self.f2_on = 0
+                self.f2_power = 100
 
-            balls.append(new_ball)
-            self.f2_on = 0
-            self.f2_power = 100
+            if self.ammotype == 1:
+                new_ball.r = 5
+                new_ball.friction = 0.85
+                new_ball.color = YELLOW
+                new_ball.vel = pygame.Vector2(self.f2_power*3, 0).rotate(self.an * 180 / 3.1416)
+                balls.append(new_ball)
+                self.f2_on = 0
+                self.f2_power = 100
 
     def targetting(self):
         """Прицеливание. Зависит от положения мыши."""
@@ -228,8 +247,15 @@ class Gun:
     def power_up(self):
         if self.f2_on:
             if self.f2_power < self.f2_maxpower:
-                self.f2_power += 30*30/FPS
-            self.color = (245 * self.f2_power / self.f2_maxpower, 55, 55)
+                if self.ammotype == 0:
+                    self.f2_power += 60*(30/FPS)
+                if self.ammotype == 1:
+                    self.f2_power += 20*(30/FPS)
+                if(self.ammotype) == 2:
+                    self.f2_power += 150*(30/FPS)
+            self.color = (250*min(self.f2_power / self.f2_maxpower, 1), 55, 55)
+            if self.color[0] > 255:
+                self.color = clamp(self.color)
         else:
             self.color = GREY
 
@@ -240,6 +266,7 @@ class Target:
         self.screen = screen
         self.points = 0
         self.live = 1
+        self.type = 0
         self.pos_0 = pygame.Vector2(rnd(600, 780), rnd(300, 500))
 
         x = self.x = rnd(600, 780)
@@ -256,6 +283,8 @@ class Target:
 
     def new_target(self):
         """ Инициализация новой цели. """
+
+        global score
         self.pos_0 = pygame.Vector2(rnd(600, 780), rnd(300, 500))
         x = self.x = rnd(600, 780)
         y = self.y = rnd(300, 550)
@@ -265,8 +294,7 @@ class Target:
         self.r_vect = pygame.Vector2(self.r_trajectory, 0)
         color = self.color = RED
         self.live = 1
-
-
+        score += 1
 
     def hit(self, points=1):
         """Попадание шарика в цель."""
@@ -287,6 +315,11 @@ screen = pygame.display.set_mode((WIDTH, HEIGHT))
 bullet = 0
 balls = []
 targ_num = 2
+score = 0
+
+text = "Score: {score:n}"
+font = pygame.font.SysFont("Segoe UI Bold", 24)
+
 
 clock = pygame.time.Clock()
 gun = Gun(screen)
@@ -297,6 +330,9 @@ finished = False
 
 while not finished:
     screen.fill(WHITE)
+    scoreboard = font.render(text.format(score=score), True, BLACK)
+    screen.blit(scoreboard, (20, 20))
+
     gun.draw()
     for i in targets:
         i.draw()
