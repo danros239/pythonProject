@@ -20,9 +20,18 @@ GAME_COLORS = [RED, BLUE, YELLOW, GREEN, MAGENTA, CYAN]
 WIDTH = 800
 HEIGHT = 600
 
+left, right = (0, 0)
+
 
 def rnd(minn, maxn):
     return minn + (maxn - minn) * rn.random()
+
+def keyPressed(inputKey):
+    keysPressed = pygame.key.get_pressed()
+    if keysPressed[inputKey]:
+        return True
+    else:
+        return False
 
 
 class Vec2:
@@ -135,6 +144,11 @@ class Gun:
         self.color = GREY
         self.x = Ball(self.screen).x
         self.y = Ball(self.screen).y
+
+        self.pos = pygame.Vector2(self.x, self.y)
+        self.vel = pygame.Vector2(0, 0)
+
+        self.vmax = 100
         self.xs = 70
         self.ys = 30
 
@@ -153,12 +167,13 @@ class Gun:
         """
         global balls, bullet
         bullet += 1
-        new_ball = Ball(self.screen)
+        new_ball = Ball(self.screen, self.x, self.y)
         new_ball.r += 5
-        self.an = math.atan2((event.pos[1] - new_ball.y), (event.pos[0] - new_ball.x))
+        self.an = math.atan2((event.pos[1] - self.y), (event.pos[0] - self.x))
 
         new_ball.vx = self.f2_power * math.cos(self.an)
         new_ball.vy = - self.f2_power * math.sin(self.an)
+
         balls.append(new_ball)
         self.f2_on = 0
         self.f2_power = 100
@@ -166,11 +181,17 @@ class Gun:
     def targetting(self, event):
         """Прицеливание. Зависит от положения мыши."""
         if event:
-            self.an = math.atan2((event.pos[1] - 450), (event.pos[0] - 20))
+            self.an = math.atan2((event.pos[1] - self.y), (event.pos[0] - self.x))
         if self.f2_on:
             self.color = RED
         else:
             self.color = GREY
+
+    def update(self):
+        if left:
+            self.x -= self.vmax / FPS
+        if right:
+            self.x += self.vmax / FPS
 
     def draw(self):
         self.sprite.fill(self.color)
@@ -200,8 +221,15 @@ class Target:
         self.screen = screen
         self.points = 0
         self.live = 1
+        self.pos_0 = pygame.Vector2(rnd(600, 780), rnd(300, 500))
+
         x = self.x = rnd(600, 780)
         y = self.y = rnd(300, 550)
+        self.r_trajectory = rnd(100, 150)
+        self.vel = rnd(50, 200)
+        self.an = 0
+        self.r_vect = pygame.Vector2(self.r_trajectory, 0)
+
         r = self.r = rnd(2, 50)
         color = self.color = RED
 
@@ -209,15 +237,27 @@ class Target:
 
     def new_target(self):
         """ Инициализация новой цели. """
+        self.pos_0 = pygame.Vector2(rnd(600, 780), rnd(300, 500))
         x = self.x = rnd(600, 780)
         y = self.y = rnd(300, 550)
         r = self.r = rnd(2, 50)
+        self.r_trajectory = rnd(100, 150)
+        self.vel = rnd(50, 200)
+        self.r_vect = pygame.Vector2(self.r_trajectory, 0)
         color = self.color = RED
         self.live = 1
+
+
 
     def hit(self, points=1):
         """Попадание шарика в цель."""
         self.points += points
+
+    def update(self):
+        self.r_vect = self.r_vect.rotate(self.vel/self.r_trajectory * 180/3.1416 / FPS)
+
+        self.x = self.pos_0.x + self.r_vect.x
+        self.y = self.pos_0.y + self.r_vect.y
 
     def draw(self):
         pygame.draw.circle(self.screen, RED, (self.x, self.y), self.r)
@@ -227,16 +267,20 @@ pygame.init()
 screen = pygame.display.set_mode((WIDTH, HEIGHT))
 bullet = 0
 balls = []
+targ_num = 2
 
 clock = pygame.time.Clock()
 gun = Gun(screen)
-target = Target(screen)
+targets = []
+for i in range(targ_num):
+    targets.append(Target(screen))
 finished = False
 
 while not finished:
     screen.fill(WHITE)
     gun.draw()
-    target.draw()
+    for i in targets:
+        i.draw()
     for b in balls:
         b.draw()
     pygame.display.update()
@@ -252,12 +296,20 @@ while not finished:
         elif event.type == pygame.MOUSEMOTION:
             gun.targetting(event)
 
+        right = keyPressed(pygame.K_d) or keyPressed(pygame.K_RIGHT)
+
+        left = keyPressed(pygame.K_a) or keyPressed(pygame.K_LEFT)
+
     for b in balls:
         b.move()
-        if b.hittest(target) and target.live:
-            target.live = 0
-            target.hit()
-            target.new_target()
+        for i in targets:
+            if b.hittest(i) and i.live:
+                i.live = 0
+                i.hit()
+                i.new_target()
     gun.power_up()
+    gun.update()
+    for i in targets:
+        i.update()
 
 pygame.quit()
