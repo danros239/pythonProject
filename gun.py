@@ -3,7 +3,7 @@ import random as rn
 
 import pygame
 
-FPS = 60
+FPS = 30
 G = 9.8 * 10 ** 2
 
 RED = 0xFF0000
@@ -21,6 +21,8 @@ WIDTH = 800
 HEIGHT = 600
 
 left, right = (0, 0)
+
+mouse_pos = pygame.Vector2(0, 0)
 
 
 def rnd(minn, maxn):
@@ -75,11 +77,16 @@ class Ball:
         self.screen = screen
         self.x = x
         self.y = y
+        self.pos = pygame.Vector2(x, y)
+
         self.r = 10
         self.vx = 0
         self.vy = 0
+        self.vel = pygame.Vector2(self.vx, self.vy)
+
         self.ax = 0
         self.ay = -G
+        self.a = pygame.Vector2(0, G)
         self.color = rn.choice(GAME_COLORS)
         self.live = 30
         self.friction = 0.25
@@ -91,33 +98,34 @@ class Ball:
         self.x и self.y с учетом скоростей self.vx и self.vy, силы гравитации, действующей на мяч,
         и стен по краям окна (размер окна 800х600).
         """
-        self.vx += self.ax / FPS / 2
-        self.vy += self.ay / FPS / 2
-        self.x += self.vx / FPS
-        self.y -= self.vy / FPS
-        self.vx += self.ax / FPS / 2
-        self.vy += self.ay / FPS / 2
+        self.vel += self.a / FPS
 
-        if self.x > WIDTH:
-            self.x -= 2 * (self.x - WIDTH)
-            self.vx *= -1
-        if self.x < 0:
-            self.x *= -1
-            self.vx *= -1
+        self.pos += self.vel / FPS
 
-        if self.y > HEIGHT:
-            dy = self.y - HEIGHT
+        #self.vel += self.a / FPS
+
+        if self.pos.x > WIDTH:
+            self.pos.x -= 2 * (self.pos.x - WIDTH)
+            self.vel.x *= -1
+        if self.pos.x < 0:
+            self.pos.x *= -1
+            self.vel.x *= -1
+
+        if self.pos.y > HEIGHT:
+            dy = self.pos.y - HEIGHT
             # print("before: " + str(self.vy**2/2 - G*(self.y - HEIGHT)) + "after: ", end=' ')
-            self.vy = math.sqrt(max(self.vy ** 2 - 4 * G * dy, 0)) * (1 - self.friction)
-            self.vx *= (1 - 0.8 * self.friction)
+            self.vel.y = math.sqrt(max(self.vel.y ** 2 - 4 * G * dy, 0)) * -(1 - self.friction)
+
+            self.vel.x *= (1 - 0.8 * self.friction)
             # print((self.vy**2)/2 - G*(self.y - HEIGHT))
-            self.y -= 2 * dy
+            self.pos.y -= 2 * dy
 
     def draw(self):
+        #self.pos = pygame.Vector2(self.x, self.y)
         pygame.draw.circle(
             self.screen,
             self.color,
-            (self.x, self.y),
+            self.pos,
             self.r
         )
 
@@ -131,7 +139,8 @@ class Ball:
         """
         # print((self.x - obj.x)**2 + (self.y - obj.y)**2 - (self.r + obj.r)**2)
 
-        return ((self.x - obj.x) ** 2 + (self.y - obj.y) ** 2) < (self.r + obj.r) ** 2
+        #return ((self.x - obj.x) ** 2 + (self.y - obj.y) ** 2) < (self.r + obj.r) ** 2
+        return (self.pos - pygame.Vector2(obj.x, obj.y)).magnitude_squared() < (self.r + obj.r)**2
 
 
 class Gun:
@@ -145,6 +154,9 @@ class Gun:
         self.x = Ball(self.screen).x
         self.y = Ball(self.screen).y
 
+        self.ammo = [10, 0, 0]
+        self.ammotype = 0
+
         self.pos = pygame.Vector2(self.x, self.y)
         self.vel = pygame.Vector2(0, 0)
 
@@ -156,8 +168,21 @@ class Gun:
         self.sprite = pygame.Surface(self.barrel)
         self.sprite.set_colorkey(RED)
 
+    def change_ammo(self, event):
+        if keyPressed(pygame.K_1):
+            self.ammotype = 0
+        elif keyPressed(pygame.K_2):
+            self.ammotype = 1
+        elif keyPressed(pygame.K_3):
+            self.ammotype = 2
+
+
     def fire2_start(self, event):
-        self.f2_on = 1
+        if self.ammo[self.ammotype] > 0:
+            self.f2_on = 1
+            self.ammo[self.ammotype] -= 1
+        else:
+            self.color = BLUE
 
     def fire2_end(self, event):
         """Выстрел мячом.
@@ -166,26 +191,24 @@ class Gun:
         Начальные значения компонент скорости мяча vx и vy зависят от положения мыши.
         """
         global balls, bullet
-        bullet += 1
-        new_ball = Ball(self.screen, self.x, self.y)
-        new_ball.r += 5
-        self.an = math.atan2((event.pos[1] - self.y), (event.pos[0] - self.x))
+        if self.f2_on == 1:
+            bullet += 1
+            new_ball = Ball(self.screen, self.x, self.y)
+            new_ball.r += 5
+            self.an = math.atan2((mouse_pos.y - self.y), (mouse_pos.x - self.x))
 
-        new_ball.vx = self.f2_power * math.cos(self.an)
-        new_ball.vy = - self.f2_power * math.sin(self.an)
+            new_ball.vx = self.f2_power * math.cos(self.an)
+            new_ball.vy = - self.f2_power * math.sin(self.an)
 
-        balls.append(new_ball)
-        self.f2_on = 0
-        self.f2_power = 100
+            new_ball.vel = pygame.Vector2(self.f2_power, 0).rotate(self.an * 180/3.1416)
 
-    def targetting(self, event):
+            balls.append(new_ball)
+            self.f2_on = 0
+            self.f2_power = 100
+
+    def targetting(self):
         """Прицеливание. Зависит от положения мыши."""
-        if event:
-            self.an = math.atan2((event.pos[1] - self.y), (event.pos[0] - self.x))
-        if self.f2_on:
-            self.color = RED
-        else:
-            self.color = GREY
+        self.an = math.atan2((mouse_pos.y - self.y), (mouse_pos.x - self.x))
 
     def update(self):
         if left:
@@ -209,7 +232,7 @@ class Gun:
     def power_up(self):
         if self.f2_on:
             if self.f2_power < self.f2_maxpower:
-                self.f2_power += 30
+                self.f2_power += 30*30/FPS
             self.color = (245 * self.f2_power / self.f2_maxpower, 55, 55)
         else:
             self.color = GREY
@@ -294,11 +317,15 @@ while not finished:
         elif event.type == pygame.MOUSEBUTTONUP:
             gun.fire2_end(event)
         elif event.type == pygame.MOUSEMOTION:
-            gun.targetting(event)
+            mouse_pos = pygame.Vector2(event.pos[0], event.pos[1])
+        elif event.type == pygame.KEYDOWN:
+            gun.change_ammo(event)
 
         right = keyPressed(pygame.K_d) or keyPressed(pygame.K_RIGHT)
 
         left = keyPressed(pygame.K_a) or keyPressed(pygame.K_LEFT)
+
+    gun.targetting()
 
     for b in balls:
         b.move()
