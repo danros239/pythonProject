@@ -75,8 +75,6 @@ class Ball:
         y - начальное положение мяча по вертикали
         """
         self.screen = screen
-        self.x = x
-        self.y = y
         self.pos = pygame.Vector2(x, y)
 
         self.r = 10
@@ -149,8 +147,8 @@ class Gun:
         self.f2_on = 0
         self.an = 1
         self.color = GREY
-        self.x = Ball(self.screen).x
-        self.y = Ball(self.screen).y
+        self.x = Ball(self.screen).pos.x
+        self.y = Ball(self.screen).pos.y
 
         self.ammo = [10, 0, 0]
         self.ammotype = 0
