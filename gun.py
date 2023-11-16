@@ -221,8 +221,15 @@ class Target:
         self.screen = screen
         self.points = 0
         self.live = 1
+        self.pos_0 = pygame.Vector2(rnd(600, 780), rnd(300, 500))
+
         x = self.x = rnd(600, 780)
         y = self.y = rnd(300, 550)
+        self.r_trajectory = rnd(100, 150)
+        self.vel = rnd(50, 200)
+        self.an = 0
+        self.r_vect = pygame.Vector2(self.r_trajectory, 0)
+
         r = self.r = rnd(2, 50)
         color = self.color = RED
 
@@ -230,15 +237,27 @@ class Target:
 
     def new_target(self):
         """ Инициализация новой цели. """
+        self.pos_0 = pygame.Vector2(rnd(600, 780), rnd(300, 500))
         x = self.x = rnd(600, 780)
         y = self.y = rnd(300, 550)
         r = self.r = rnd(2, 50)
+        self.r_trajectory = rnd(100, 150)
+        self.vel = rnd(50, 200)
+        self.r_vect = pygame.Vector2(self.r_trajectory, 0)
         color = self.color = RED
         self.live = 1
+
+
 
     def hit(self, points=1):
         """Попадание шарика в цель."""
         self.points += points
+
+    def update(self):
+        self.r_vect = self.r_vect.rotate(self.vel/self.r_trajectory * 180/3.1416 / FPS)
+
+        self.x = self.pos_0.x + self.r_vect.x
+        self.y = self.pos_0.y + self.r_vect.y
 
     def draw(self):
         pygame.draw.circle(self.screen, RED, (self.x, self.y), self.r)
@@ -290,5 +309,7 @@ while not finished:
                 i.new_target()
     gun.power_up()
     gun.update()
+    for i in targets:
+        i.update()
 
 pygame.quit()
