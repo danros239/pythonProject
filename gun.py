@@ -93,6 +93,9 @@ class Ball:
         self.live = 30
         self.friction = 0.25
 
+    def __del__(self):
+        print("Ball destroyed")
+
 
     def move(self):
         """Переместить мяч по прошествии единицы времени.
@@ -123,6 +126,9 @@ class Ball:
             # print((self.vy**2)/2 - G*(self.y - HEIGHT))
             self.pos.y -= 2 * dy
 
+    def get_vel2(self):
+        return self.vel.magnitude_squared()
+
     def draw(self):
         #self.pos = pygame.Vector2(self.x, self.y)
         if self.type == 0:
@@ -144,9 +150,18 @@ class Ball:
             Возвращает True в случае столкновения мяча и цели. В противном случае возвращает False.
         """
         if self.type >= 0:
-            return (self.pos - pygame.Vector2(obj.x, obj.y)).magnitude_squared() < (self.r + obj.r)**2
-        else:
-            return False
+            return (self.pos - pygame.Vector2(obj.pos.x, obj.pos.y)).magnitude_squared() < (self.r + obj.r)**2
+        elif self.type == 1:
+            flag = False
+            point = pygame.Vector2(self.vel*1.5/30 / 5)
+            for i in range(5):
+                newpos = self.pos + i*point
+                if (newpos - pygame.Vector2(obj.pos.x, obj.pos.y)).magnitude_squared() < (self.r + obj.r)**2:
+                    flag = True
+            return flag
+
+
+
 
 
 class Gun:
@@ -231,6 +246,8 @@ class Gun:
         if right:
             self.x += self.vmax / FPS
 
+        self.pos.x = self.x
+
     def draw(self):
         self.sprite.fill(self.color)
         sprite_new = pygame.transform.rotate(self.sprite, -self.an * 180 / math.pi)
@@ -238,7 +255,7 @@ class Gun:
         rect = sprite_new.get_rect()
         rect.center = (self.x - self.xs / 2 + self.ys / 2, self.y)
 
-        sprite_new, rect = rotate(self.sprite, self.an * 180 / math.pi, (self.x - self.xs/2 + self.ys/2, self.y), pygame.Vector2(self.xs/2 - self.ys/2, 0))
+        sprite_new, rect = rotate(self.sprite, self.an * 180 / math.pi, (self.x, self.y), pygame.Vector2(self.xs/2 - self.ys/2, 0))
         screen.blit(sprite_new, rect)
         # pygame.draw.rect(self.screen, self.color, self.sprite)
         # pygame.draw.rect(self.screen, self.color, ((self.x, self.y), (self.f2_power/self.f2_maxpower*100 + 10, 10)), 2, 5)
@@ -267,12 +284,16 @@ class Target:
         self.points = 0
         self.live = 1
         self.type = 0
-        self.pos_0 = pygame.Vector2(rnd(600, 780), rnd(300, 500))
 
-        x = self.x = rnd(600, 780)
-        y = self.y = rnd(300, 550)
+        self.pos_0 = pygame.Vector2(rnd(600, 780), rnd(300, 500))
+        self.pos = pygame.Vector2(self.pos_0.x, self.pos_0.y)
+
         self.r_trajectory = rnd(100, 150)
-        self.vel = rnd(50, 200)
+        self.r_vel = rnd(50, 200)
+
+        self.vel = pygame.Vector2(0, 0)
+        self.accel = pygame.Vector2(0, 0)
+        
         self.an = 0
         self.r_vect = pygame.Vector2(self.r_trajectory, 0)
 
@@ -288,9 +309,10 @@ class Target:
         self.pos_0 = pygame.Vector2(rnd(600, 780), rnd(300, 500))
         x = self.x = rnd(600, 780)
         y = self.y = rnd(300, 550)
+        self.pos = pygame.Vector2(self.x, self.y)
         r = self.r = rnd(2, 50)
         self.r_trajectory = rnd(100, 150)
-        self.vel = rnd(50, 200)
+        self.r_vel = rnd(50, 200)
         self.r_vect = pygame.Vector2(self.r_trajectory, 0)
         color = self.color = RED
         self.live = 1
@@ -301,13 +323,58 @@ class Target:
         self.points += points
 
     def update(self):
-        self.r_vect = self.r_vect.rotate(self.vel/self.r_trajectory * 180/3.1416 / FPS)
+        if self.type == 0:
+            self.r_vect = self.r_vect.rotate(self.r_vel/self.r_trajectory * 180/3.1416 / FPS)
+            self.pos = self.pos_0 + self.r_vect
+            print(self.pos)
 
-        self.x = self.pos_0.x + self.r_vect.x
-        self.y = self.pos_0.y + self.r_vect.y
+        else:
+            self.vel += self.accel / FPS
+            self.pos += self.vel / FPS
 
     def draw(self):
-        pygame.draw.circle(self.screen, RED, (self.x, self.y), self.r)
+        pygame.draw.circle(self.screen, RED, self.pos, self.r)
+
+class Dropper:
+    def __init__(self, screen, pos):
+        self.screen = screen
+        self.pos = pygame.Vector2(pos)
+        self.vel = pygame.Vector2(0, 0)
+        self.vmax = 100
+        self.size = pygame.Vector2(100, 50)
+
+        self.cooldown = 1
+        self.timer = 0
+        self.bombs = 1
+
+    def draw(self):
+        pygame.draw.rect(self.screen, BLACK, (self.pos - self.size/2, self.size))
+
+    def update(self, gun, targets):
+        self.vel.x += 60/FPS * math.copysign(1, gun.pos.x - self.pos.x)
+
+        if self.vel.magnitude() > self.vmax:
+            self.vel.x = self.vmax * math.copysign(1, self.vel.x)
+
+        self.pos += self.vel / FPS
+        if math.fabs(self.pos.x - gun.pos.x) < 5 and self.timer > self.cooldown:
+            self.drop(targets)
+            self.timer = 0
+        self.timer += 1/FPS
+
+
+    def drop(self, targets):
+        new_target = Target(self.screen)
+        new_target.type = 1
+        new_target.accel = pygame.Vector2(0, G/5)
+        new_target.color = BLACK
+        new_target.r = 10
+        new_target.vel.x = self.vel.x
+        new_target.pos = pygame.Vector2(self.pos)
+        targets.append(new_target)
+        return 1
+
+
 
 
 pygame.init()
@@ -316,14 +383,21 @@ bullet = 0
 balls = []
 targ_num = 2
 score = 0
+active = 0
 
 text = "Score: {score:n}"
 font = pygame.font.SysFont("Segoe UI Bold", 24)
 
 
 clock = pygame.time.Clock()
-gun = Gun(screen)
+guns = []
+guns.append(Gun(screen))
+guns.append(Gun(screen))
+guns[1].x += 400
+
+dropper = Dropper(screen, pygame.Vector2(100, 100))
 targets = []
+
 for i in range(targ_num):
     targets.append(Target(screen))
 finished = False
@@ -332,8 +406,9 @@ while not finished:
     screen.fill(WHITE)
     scoreboard = font.render(text.format(score=score), True, BLACK)
     screen.blit(scoreboard, (20, 20))
-
-    gun.draw()
+    dropper.draw()
+    for gun in guns:
+        gun.draw()
     for i in targets:
         i.draw()
     for b in balls:
@@ -345,30 +420,38 @@ while not finished:
         if event.type == pygame.QUIT:
             finished = True
         elif event.type == pygame.MOUSEBUTTONDOWN:
-            gun.fire2_start(event)
+            guns[active].fire2_start(event)
         elif event.type == pygame.MOUSEBUTTONUP:
-            gun.fire2_end(event)
+            guns[active].fire2_end(event)
         elif event.type == pygame.MOUSEMOTION:
             mouse_pos = pygame.Vector2(event.pos[0], event.pos[1])
         elif event.type == pygame.KEYDOWN:
-            gun.change_ammo(event)
+            guns[active].change_ammo(event)
+            if keyPressed(pygame.K_SPACE):
+                active = (active + 1)%2
 
         right = keyPressed(pygame.K_d) or keyPressed(pygame.K_RIGHT)
 
         left = keyPressed(pygame.K_a) or keyPressed(pygame.K_LEFT)
 
-    gun.targetting()
+    guns[active].targetting()
 
     for b in balls:
         b.move()
+        if b.get_vel2() < 1:
+            balls.remove(b)
+
         for i in targets:
             if b.hittest(i) and i.live:
                 i.live = 0
                 i.hit()
                 i.new_target()
-    gun.power_up()
-    gun.update()
+    guns[active].power_up()
+    guns[active].update()
+    dropper.update(guns[active], targets)
+
     for i in targets:
         i.update()
+
 
 pygame.quit()
